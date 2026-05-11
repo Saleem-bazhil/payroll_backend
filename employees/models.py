@@ -1,0 +1,28 @@
+from django.db import models
+
+# Create your models here.
+class Employee(models.Model):
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('onleave', 'On Leave'),
+    )
+    BRANCH_CHOICES = (
+        ('Chennai', 'Chennai'),
+        ('Vellore', 'Vellore'),
+        ('Salem', 'Salem'),
+        ('Kanchipuram', 'Kanchipuram'),
+        ('Hosur', 'Hosur')
+    )
+    employee_name = models.CharField(max_length=100)
+    branch = models.CharField(max_length=100, choices=BRANCH_CHOICES, default='Chennai')
+    email = models.EmailField(unique=True, max_length=100, null=True, blank=True)
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    role = models.CharField(max_length=100)
+    department = models.CharField(max_length=100)
+    salary = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    joining_date = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return self.employee_name
