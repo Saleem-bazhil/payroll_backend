@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Q
 from django.utils import timezone
-from .models import Attendance
+from .models import Attendance, LeaveRequest
 from employees.models import Employee
 
 class AttendanceSerializer(serializers.ModelSerializer):
@@ -89,3 +89,23 @@ class AttendanceSerializer(serializers.ModelSerializer):
                     return existing
 
         return super().create(validated_data)
+
+
+class LeaveRequestSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source="employee.employee_name", read_only=True)
+
+    class Meta:
+        model = LeaveRequest
+        fields = "__all__"
+        read_only_fields = ("employee", "status", "applied_on")
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            user = request.user
+            role = "superadmin" if user.is_superuser else user.role
+            employee = getattr(user, "employee_profile", None)
+            if not employee:
+                raise serializers.ValidationError("Your account has no Employee profile linked. Cannot create Leave request.")
+            attrs["employee"] = employee
+        return attrs

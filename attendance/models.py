@@ -27,3 +27,31 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.employee_name} - {self.intime.date() if self.intime else 'No Date'}"
+
+
+class LeaveRequest(models.Model):
+    LEAVE_TYPE_CHOICES = (
+        ('Leave', 'Leave'),
+        ('Permission', 'Permission'),
+    )
+    STATUS_CHOICES = (
+        ('Pending', 'Pending'),
+        ('Approved', 'Approved'),
+        ('Rejected', 'Rejected'),
+    )
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="leave_requests"
+    )
+    leave_type = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES, default='Leave')
+    reason = models.TextField()
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True) # Used primarily for Leaves
+    start_time = models.TimeField(null=True, blank=True) # Used for short permissions
+    end_time = models.TimeField(null=True, blank=True)   # Used for short permissions
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    applied_on = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.employee.employee_name} - {self.leave_type} ({self.status})"
