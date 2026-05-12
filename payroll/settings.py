@@ -33,6 +33,7 @@ ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
+    "django_filters",
     'authentication',
     'attendance',
     'employees',

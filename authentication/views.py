@@ -1,6 +1,19 @@
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import RoleTokenObtainPairSerializer
+from rest_framework import viewsets, filters
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from .serializers import RoleTokenObtainPairSerializer, UserSerializer
+from .models import User
 
 
 class RoleTokenObtainPairView(TokenObtainPairView):
     serializer_class = RoleTokenObtainPairSerializer
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all().order_by("-date_joined")
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["role", "is_active"]
+    search_fields = ["username", "email", "first_name", "last_name"]
