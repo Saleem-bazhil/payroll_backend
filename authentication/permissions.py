@@ -7,7 +7,7 @@ class IsSuperAdmin(BasePermission):
 
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ["superadmin", "admin"]
+        return request.user.is_authenticated and (request.user.is_superuser or request.user.role in ["superadmin", "admin"])
 
 class IsEmployee(BasePermission):
     def has_permission(self, request, view):
