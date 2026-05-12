@@ -2,6 +2,8 @@ from django.db import models
 
 # Create your models here.
 class Employee(models.Model):
+    user = models.OneToOneField('authentication.User', on_delete=models.CASCADE, related_name='employee_profile',    null=True,
+    blank=True)
     STATUS_CHOICES = (
         ('active', 'Active'),
         ('inactive', 'Inactive'),

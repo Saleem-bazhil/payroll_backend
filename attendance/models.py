@@ -1,4 +1,5 @@
 from django.db import models
+from employees.models import Employee
 
 # Create your models here.
 class Attendance(models.Model):
@@ -8,6 +9,13 @@ class Attendance(models.Model):
         ('Leave', 'Leave'),
         ('Late', 'Late'),
         ('Overtime', 'Overtime'),
+    )
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="attendances",
+        null=True,
+        blank=True,
     )
     employee_name = models.CharField(max_length=100)
     role = models.CharField(max_length=100)
