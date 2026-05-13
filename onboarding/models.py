@@ -36,14 +36,14 @@ class Onboarding(models.Model):
     photo_submitted = models.CharField(max_length=10, blank=True, null=True)
     id_card_blood_group = models.CharField(max_length=20, blank=True, null=True)
 
-    # 6. Documents Submitted (Store as Boolean)
-    doc_aadhaar = models.BooleanField(default=False)
-    doc_pan = models.BooleanField(default=False)
-    doc_bank_proof = models.BooleanField(default=False)
-    doc_passport_photo = models.BooleanField(default=False)
-    doc_education_cert = models.BooleanField(default=False)
-    doc_resume = models.BooleanField(default=False)
-    doc_driving_license = models.BooleanField(default=False)
+    # 6. Documents Submitted (Store as FileField instead of Boolean)
+    doc_aadhaar = models.FileField(upload_to='onboarding_docs/aadhaar/', blank=True, null=True)
+    doc_pan = models.FileField(upload_to='onboarding_docs/pan/', blank=True, null=True)
+    doc_bank_proof = models.FileField(upload_to='onboarding_docs/bank_proof/', blank=True, null=True)
+    doc_passport_photo = models.FileField(upload_to='onboarding_docs/passport/', blank=True, null=True)
+    doc_education_cert = models.FileField(upload_to='onboarding_docs/education/', blank=True, null=True)
+    doc_resume = models.FileField(upload_to='onboarding_docs/resume/', blank=True, null=True)
+    doc_driving_license = models.FileField(upload_to='onboarding_docs/driving_license/', blank=True, null=True)
 
     # 7. Additional Info
     total_experience = models.CharField(max_length=100, blank=True, null=True)
