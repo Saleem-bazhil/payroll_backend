@@ -23,6 +23,8 @@ class Employee(models.Model):
     role = models.CharField(max_length=100)
     department = models.CharField(max_length=100)
     salary = models.DecimalField(max_digits=10, decimal_places=2)
+    work_lat = models.FloatField(null=True, blank=True, help_text="Allowed work location latitude")
+    work_lon = models.FloatField(null=True, blank=True, help_text="Allowed work location longitude")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     joining_date = models.DateField(auto_now_add=True)
 
