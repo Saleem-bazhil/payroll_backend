@@ -22,6 +22,11 @@ class UserManagementSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("date_joined", "is_staff")
 
+    def validate_phone_number(self, value):
+        if not value:
+            return None
+        return value
+
     def create(self, validated_data):
         password = validated_data.pop("password", None)
         user = User(**validated_data)
