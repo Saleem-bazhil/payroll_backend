@@ -8,6 +8,9 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         token["role"] = "superadmin" if user.is_superuser else user.role
+        token["first_name"] = user.first_name
+        token["last_name"] = user.last_name
+        token["username"] = user.username
         employee_profile = getattr(user, "employee_profile", None)
         token["employee_id"] = employee_profile.id if employee_profile else None
         return token
