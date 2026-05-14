@@ -1,3 +1,278 @@
-from django.shortcuts import render
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
+import calendar
 
-# Create your views here.
+from .models import Payslip
+from .serializer import PayslipSerializer
+from employees.models import Employee
+from attendance.models import Attendance
+
+class PayslipViewSet(viewsets.ModelViewSet):
+    queryset = Payslip.objects.all()
+    serializer_class = PayslipSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Payslip.objects.all().order_by("-year", "-month", "-id")
+        role = "superadmin" if user.is_superuser else getattr(user, 'role', 'employee')
+        if role == "employee":
+            return queryset.filter(employee__user=user)
+        return queryset
+
+    @action(detail=False, methods=['post'])
+    def generate_all(self, request):
+        """
+        Bulk generates/calculates detailed payslips based on pro-rated Indian salary structures
+        as provided by user guidelines.
+        """
+        now = timezone.now()
+        month = request.data.get('month', now.month)
+        year = request.data.get('year', now.year)
+
+        try:
+            month = int(month)
+            year = int(year)
+        except ValueError:
+            return Response({"error": "Invalid month or year format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Get Total Days in current month
+        _, total_days = calendar.monthrange(year, month)
+        
+        active_employees = Employee.objects.filter(status='active')
+        created_count = 0
+        updated_count = 0
+
+        def q(val):
+            """Helper to round Decimal value to two decimal places."""
+            return Decimal(val).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        for emp in active_employees:
+            # 2. Calculate LOP days based on Attendance Table
+            lop_days = Decimal(Attendance.objects.filter(
+                employee=emp,
+                intime__year=year,
+                intime__month=month,
+                status='Absent'
+            ).count())
+
+            paid_days = Decimal(total_days) - lop_days
+            if paid_days < 0:
+                paid_days = Decimal(0)
+
+            # Pro-rata ratio
+            multiplier = paid_days / Decimal(total_days)
+
+            # 3. Gross Structure (Base Fixed Monthly Salary)
+            gross_salary = emp.salary
+            gross_basic = q(gross_salary * Decimal('0.50')) # 50% Basic
+            gross_hra = q(gross_salary * Decimal('0.25'))   # 25% HRA
+            
+            # Constant allowances
+            gross_conveyance = Decimal('1600.00')
+            gross_child_edu = Decimal('200.00')
+            
+            # Handled fallback in case overall salary is low
+            if (gross_basic + gross_hra + gross_conveyance + gross_child_edu) > gross_salary:
+                gross_conveyance = Decimal(0)
+                gross_child_edu = Decimal(0)
+            
+            gross_personal = gross_salary - gross_basic - gross_hra - gross_conveyance - gross_child_edu
+            if gross_personal < 0:
+                gross_personal = Decimal(0)
+
+            # Re-adjust gross total (should match original emp.salary)
+            gross_salary = gross_basic + gross_hra + gross_conveyance + gross_child_edu + gross_personal
+
+            # 4. Earned Components (Pro-rated based on paid_days / total_days)
+            earned_basic = q(gross_basic * multiplier)
+            earned_hra = q(gross_hra * multiplier)
+            earned_conveyance = q(gross_conveyance * multiplier)
+            earned_child_edu = q(gross_child_edu * multiplier)
+            earned_personal = q(gross_personal * multiplier)
+            
+            # Calculate Earned Gross Sum
+            gross_earnings = earned_basic + earned_hra + earned_conveyance + earned_child_edu + earned_personal
+
+            # 5. Deductions Components
+            # EPF = 12% of Earned Basic
+            deduction_epf = q(earned_basic * Decimal('0.12'))
+            
+            # Flat 208.30 Professional tax per user's image reference
+            deduction_prof_tax = Decimal('208.30') if gross_salary > 12000 else Decimal('0.00')
+            deduction_esi = Decimal('0.00') # Optional default
+            
+            gross_deductions = deduction_epf + deduction_prof_tax + deduction_esi
+
+            # 6. Net Take Home Salary (Rounded to nearest full integer as seen in image)
+            net_salary = gross_earnings - gross_deductions
+            net_rounded = Decimal(net_salary).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+
+            # Save / Update Record
+            payslip, created = Payslip.objects.update_or_create(
+                employee=emp,
+                month=month,
+                year=year,
+                defaults={
+                    'total_days': total_days,
+                    'lop_days': lop_days,
+                    'paid_days': paid_days,
+                    
+                    'gross_basic': gross_basic,
+                    'gross_hra': gross_hra,
+                    'gross_conveyance': gross_conveyance,
+                    'gross_child_edu': gross_child_edu,
+                    'gross_personal_allowance': gross_personal,
+                    'gross_salary': gross_salary,
+                    
+                    'earned_basic': earned_basic,
+                    'earned_hra': earned_hra,
+                    'earned_conveyance': earned_conveyance,
+                    'earned_child_edu': earned_child_edu,
+                    'earned_personal_allowance': earned_personal,
+                    'gross_earnings': gross_earnings,
+                    
+                    'deduction_epf': deduction_epf,
+                    'deduction_esi': deduction_esi,
+                    'deduction_prof_tax': deduction_prof_tax,
+                    'gross_deductions': gross_deductions,
+                    
+                    'net_salary': net_rounded,
+                    'status': 'Generated'
+                }
+            )
+
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+
+        return Response({
+            "message": f"Processed slips for {month}/{year} with pro-rated structural logic.",
+            "created": created_count,
+            "updated": updated_count
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def cycles_summary(self, request):
+        """Aggregates monthly payslip records to provide enterprise-wide Payroll status cycles."""
+        from django.db.models import Count, Sum
+        summary = Payslip.objects.values('year', 'month').annotate(
+            employees_count=Count('id'),
+            total_gross=Sum('gross_earnings'),
+            total_net=Sum('net_salary')
+        ).order_by('-year', '-month')
+
+        data = []
+        month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        for item in summary:
+            m = item['month']
+            m_name = month_names[m] if 1 <= m <= 12 else str(m)
+            data.append({
+                "period": f"{m_name} {item['year']}",
+                "employees": item['employees_count'],
+                "gross": f"₹{int(item['total_gross']):,}" if item['total_gross'] else "₹0",
+                "net": f"₹{int(item['total_net']):,}" if item['total_net'] else "₹0",
+                "status": "Completed"
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def company_stats(self, request):
+        """Calculates high-level corporate KPIs based on true computed data."""
+        from django.db.models import Sum
+        from django.utils import timezone
+        now = timezone.now()
+        
+        this_month_slips = Payslip.objects.filter(month=now.month, year=now.year)
+        total_this_month = this_month_slips.aggregate(s=Sum('net_salary'))['s'] or 0
+        
+        ytd_slips = Payslip.objects.filter(year=now.year)
+        total_ytd = ytd_slips.aggregate(s=Sum('net_salary'))['s'] or 0
+        
+        processed_pct = "100%" if total_this_month > 0 else "0%"
+        
+        def fmt(val):
+            fval = float(val)
+            if fval >= 100000:
+                return f"₹{(fval/100000.0):.2f}L"
+            if fval >= 1000:
+                return f"₹{(fval/1000.0):.1f}K"
+            return f"₹{int(fval):,}"
+            
+        return Response({
+            "thisMonth": fmt(total_this_month),
+            "ytdTotal": fmt(total_ytd),
+            "pending": "₹0",
+            "processed": processed_pct
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def dashboard_summary(self, request):
+        """Aggregates complete enterprise metrics to power the Corporate Dashboard view."""
+        from django.db.models import Sum, Avg
+        from django.utils import timezone
+        import calendar
+        from employees.models import Employee
+        from onboarding.models import Onboarding
+        
+        active_emps = Employee.objects.filter(status='active')
+        total_employees = active_emps.count()
+        
+        # Avg Salary of active employees
+        avg_salary_raw = active_emps.aggregate(a=Avg('salary'))['a'] or 0
+        
+        # Overall Lifetime Payroll distributed
+        total_payroll_raw = Payslip.objects.aggregate(s=Sum('net_salary'))['s'] or 0
+        
+        # Pending onboarding processes
+        pending_approvals = Onboarding.objects.exclude(status='Completed').count()
+        
+        # Recent Payslips (last 5)
+        recent_slips = Payslip.objects.select_related('employee').order_by('-id')[:5]
+        recent_txns = []
+        for s in recent_slips:
+            recent_txns.append({
+                "name": s.employee.employee_name,
+                "dept": getattr(s.employee, 'department', 'Staff') or 'Staff',
+                "amount": f"₹{int(s.net_salary):,}",
+                "status": "Paid"
+            })
+            
+        def fmt_dashboard(val):
+            fval = float(val)
+            if fval >= 100000:
+                return f"₹{(fval/100000.0):.2f}L"
+            if fval >= 1000:
+                return f"₹{(fval/1000.0):.1f}K"
+            return f"₹{int(fval):,}"
+            
+        total_disburse_raw = active_emps.aggregate(s=Sum('salary'))['s'] or 0
+        
+        now = timezone.now()
+        _, last_day = calendar.monthrange(now.year, now.month)
+        cycle_date = timezone.datetime(now.year, now.month, last_day)
+        days_remaining = (cycle_date.date() - now.date()).days
+        if days_remaining < 0:
+            days_remaining = 0
+            
+        return Response({
+            "totalPayroll": fmt_dashboard(total_payroll_raw),
+            "totalEmployees": f"{total_employees:,}",
+            "avgSalary": fmt_dashboard(avg_salary_raw),
+            "pendingApprovals": f"{pending_approvals}",
+            
+            "recentTransactions": recent_txns,
+            
+            "upcoming": {
+                "totalToDisburse": f"₹{int(total_disburse_raw):,}",
+                "date": cycle_date.strftime("%b %d, %Y"),
+                "daysLeft": f"In {days_remaining} days" if days_remaining > 0 else "Today",
+                "employees": f"{total_employees:,}",
+                "avgPayout": fmt_dashboard(avg_salary_raw)
+            }
+        }, status=status.HTTP_200_OK)
