@@ -68,25 +68,36 @@ class PayslipViewSet(viewsets.ModelViewSet):
             multiplier = paid_days / Decimal(total_days)
 
             # 3. Gross Structure (Base Fixed Monthly Salary)
-            gross_salary = emp.salary
-            gross_basic = q(gross_salary * Decimal('0.50')) # 50% Basic
-            gross_hra = q(gross_salary * Decimal('0.25'))   # 25% HRA
-            
-            # Constant allowances
-            gross_conveyance = Decimal('1600.00')
-            gross_child_edu = Decimal('200.00')
-            
-            # Handled fallback in case overall salary is low
-            if (gross_basic + gross_hra + gross_conveyance + gross_child_edu) > gross_salary:
-                gross_conveyance = Decimal(0)
-                gross_child_edu = Decimal(0)
-            
-            gross_personal = gross_salary - gross_basic - gross_hra - gross_conveyance - gross_child_edu
-            if gross_personal < 0:
-                gross_personal = Decimal(0)
-
-            # Re-adjust gross total (should match original emp.salary)
-            gross_salary = gross_basic + gross_hra + gross_conveyance + gross_child_edu + gross_personal
+            # If Employee has been configured with a base structure, use it!
+            if emp.basic > Decimal('0.00'):
+                gross_basic = emp.basic
+                gross_hra = emp.hra
+                gross_conveyance = emp.conveyance
+                gross_child_edu = emp.child_edu
+                gross_personal = emp.personal_allowance
+                gross_incentive = emp.incentive
+                gross_other_earnings = emp.other_earnings
+                gross_salary = emp.salary
+            else:
+                # Legacy/Fallback calculation
+                gross_salary = emp.salary
+                gross_basic = q(gross_salary * Decimal('0.50')) # 50% Basic
+                gross_hra = q(gross_salary * Decimal('0.25'))   # 25% HRA
+                gross_conveyance = Decimal('1600.00')
+                gross_child_edu = Decimal('200.00')
+                
+                # Handled fallback in case overall salary is low
+                if (gross_basic + gross_hra + gross_conveyance + gross_child_edu) > gross_salary:
+                    gross_conveyance = Decimal(0)
+                    gross_child_edu = Decimal(0)
+                
+                gross_personal = gross_salary - gross_basic - gross_hra - gross_conveyance - gross_child_edu
+                if gross_personal < 0:
+                    gross_personal = Decimal(0)
+                gross_incentive = Decimal('0.00')
+                gross_other_earnings = Decimal('0.00')
+                # Re-adjust gross total
+                gross_salary = gross_basic + gross_hra + gross_conveyance + gross_child_edu + gross_personal
 
             # 4. Earned Components (Pro-rated based on paid_days / total_days)
             earned_basic = q(gross_basic * multiplier)
@@ -94,21 +105,49 @@ class PayslipViewSet(viewsets.ModelViewSet):
             earned_conveyance = q(gross_conveyance * multiplier)
             earned_child_edu = q(gross_child_edu * multiplier)
             earned_personal = q(gross_personal * multiplier)
+            earned_incentive = q(gross_incentive * multiplier)
+            earned_other_earnings = q(gross_other_earnings * multiplier)
             
             # Calculate Earned Gross Sum
-            gross_earnings = earned_basic + earned_hra + earned_conveyance + earned_child_edu + earned_personal
+            gross_earnings = earned_basic + earned_hra + earned_conveyance + earned_child_edu + earned_personal + earned_incentive + earned_other_earnings
 
             # 5. Deductions Components
-            # EPF = 12% of Earned Basic
-            deduction_epf = q(earned_basic * Decimal('0.12'))
+            if emp.basic > Decimal('0.00'):
+                # Pro-rate PF and ESI based on attendance, other fixed deductions taken fully
+                deduction_epf = q(emp.epf * multiplier)
+                deduction_esi = q(emp.esi * multiplier)
+                deduction_prof_tax = emp.prof_tax
+                deduction_lwf = emp.lwf
+                deduction_staff_advance = emp.staff_advance
+                deduction_tds = emp.tds
+                deduction_other = emp.other_deduction
+                deduction_insurance = emp.deduction_insurance
+                
+                # Pro-rate Employer contributions by attendance as well
+                employer_epf = q(emp.employer_epf * multiplier)
+                employer_esi = q(emp.employer_esi * multiplier)
+                employer_insurance = emp.employer_insurance
+                petrol_allowance = q(emp.petrol_allowance * multiplier)
+            else:
+                # Legacy/Fallback deduction calculation
+                deduction_epf = q(earned_basic * Decimal('0.12'))
+                deduction_prof_tax = Decimal('208.30') if gross_salary > 12000 else Decimal('0.00')
+                deduction_esi = Decimal('0.00')
+                deduction_lwf = Decimal('0.00')
+                deduction_staff_advance = Decimal('0.00')
+                deduction_tds = Decimal('0.00')
+                deduction_other = Decimal('0.00')
+                deduction_insurance = Decimal('0.00')
+                
+                # Fallback Employer Benefits
+                employer_epf = q(earned_basic * Decimal('0.13')) # Standard 13% fallback
+                employer_esi = Decimal('0.00')
+                employer_insurance = Decimal('0.00')
+                petrol_allowance = Decimal('0.00')
             
-            # Flat 208.30 Professional tax per user's image reference
-            deduction_prof_tax = Decimal('208.30') if gross_salary > 12000 else Decimal('0.00')
-            deduction_esi = Decimal('0.00') # Optional default
-            
-            gross_deductions = deduction_epf + deduction_prof_tax + deduction_esi
+            gross_deductions = deduction_epf + deduction_esi + deduction_prof_tax + deduction_lwf + deduction_staff_advance + deduction_tds + deduction_other + deduction_insurance
 
-            # 6. Net Take Home Salary (Rounded to nearest full integer as seen in image)
+            # 6. Net Take Home Salary (Rounded to nearest full integer)
             net_salary = gross_earnings - gross_deductions
             net_rounded = Decimal(net_salary).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
 
@@ -127,6 +166,8 @@ class PayslipViewSet(viewsets.ModelViewSet):
                     'gross_conveyance': gross_conveyance,
                     'gross_child_edu': gross_child_edu,
                     'gross_personal_allowance': gross_personal,
+                    'gross_incentive': gross_incentive,
+                    'gross_other_earnings': gross_other_earnings,
                     'gross_salary': gross_salary,
                     
                     'earned_basic': earned_basic,
@@ -134,12 +175,24 @@ class PayslipViewSet(viewsets.ModelViewSet):
                     'earned_conveyance': earned_conveyance,
                     'earned_child_edu': earned_child_edu,
                     'earned_personal_allowance': earned_personal,
+                    'earned_incentive': earned_incentive,
+                    'earned_other_earnings': earned_other_earnings,
                     'gross_earnings': gross_earnings,
                     
                     'deduction_epf': deduction_epf,
                     'deduction_esi': deduction_esi,
                     'deduction_prof_tax': deduction_prof_tax,
+                    'deduction_lwf': deduction_lwf,
+                    'deduction_staff_advance': deduction_staff_advance,
+                    'deduction_tds': deduction_tds,
+                    'deduction_other': deduction_other,
+                    'deduction_insurance': deduction_insurance,
                     'gross_deductions': gross_deductions,
+                    
+                    'employer_epf': employer_epf,
+                    'employer_esi': employer_esi,
+                    'employer_insurance': employer_insurance,
+                    'petrol_allowance': petrol_allowance,
                     
                     'net_salary': net_rounded,
                     'status': 'Generated'

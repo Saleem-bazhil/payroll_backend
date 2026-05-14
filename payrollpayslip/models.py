@@ -23,6 +23,8 @@ class Payslip(models.Model):
     gross_conveyance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_child_edu = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_personal_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    gross_incentive = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    gross_other_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Gross Earnings Components (Actually Pro-rated based on worked days)
@@ -31,13 +33,26 @@ class Payslip(models.Model):
     earned_conveyance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     earned_child_edu = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     earned_personal_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    earned_incentive = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    earned_other_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Deductions Components
     deduction_epf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     deduction_esi = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     deduction_prof_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_lwf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_staff_advance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_tds = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_other = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_insurance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gross_deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Benefits Group (CTC Components)
+    employer_epf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_esi = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_insurance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    petrol_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Net Take Home Salary
     net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
