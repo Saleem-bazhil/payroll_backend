@@ -23,6 +23,32 @@ class Employee(models.Model):
     role = models.CharField(max_length=100)
     department = models.CharField(max_length=100)
     salary = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Detailed Earnings Breakdown
+    basic = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    hra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    conveyance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    child_edu = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    personal_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    incentive = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    other_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Detailed Deductions Breakdown
+    epf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    esi = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    prof_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    lwf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    staff_advance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tds = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    other_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deduction_insurance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Benefits Group (CTC Components)
+    employer_epf = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_esi = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    employer_insurance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    petrol_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     work_lat = models.FloatField(null=True, blank=True, help_text="Allowed work location latitude")
     work_lon = models.FloatField(null=True, blank=True, help_text="Allowed work location longitude")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
